@@ -135,8 +135,4 @@
   (let [ys (savedOrNoFollowings xs)]
   (filter #(not (contains? ys %)) xs)))
 
-(savedOrNoFolloers (range 1 10))
-
-(followingsToDownload (range 1 10))
-
 

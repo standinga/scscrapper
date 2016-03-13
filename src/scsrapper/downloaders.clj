@@ -200,8 +200,13 @@
     (let
       [ids (map read-string (re-seq #"\w+" (read-line)))
        a (first ids)
-       b (second ids)]
-      (time (doall (pmap (fn [x] (doall (pmap dloadAndSave_Followers x))) (partition-all 20 (db/followersToDownload (range a b)))))))))
+       b (second ids)
+       followers (db/followersToDownload (range a b))
+       _ (println "followers " followers)
+       followings (db/followingsToDownload (range a b))
+       _ (println "followings " followings)]
+      (time (doall
+              (pmap (fn [x] (doall (pmap dloadAndSave_Followers x))) (partition-all 20 followers)))))))
 ;;                    (pmap (fn [x] (doall (pmap dloadAndSave_Followings x))) (partition-all 20 (db/followingsToDownload (range a b)))))))))
 
 ;; (-main)
