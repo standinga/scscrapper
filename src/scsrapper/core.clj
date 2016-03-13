@@ -1,7 +1,9 @@
 (ns scsrapper.core
-  (:gen-class))
+  (:gen-class)
+    (:require [scsrapper.downloaders :as downloaders]))
 
 (defn -main
-  "I don't do a whole lot ... yet."
   [& args]
-  (println "Hello, World!"))
+  (downloaders/-main))
+
+(-main)
