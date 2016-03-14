@@ -2,13 +2,17 @@
   (:import [java.sql SQLException])
   (:require [clojure.java.jdbc :as jdbc]
             [hikari-cp.core :refer :all]
+            [scsrapper.inits :as inits]
             ))
 
 (def db {:classname "com.mysql.jdbc.Driver"
          :subprotocol "mysql"
-         :subname "//localhost:3306/soundcloud"
-         :user "root"
-         :password "pass"})
+         :subname inits/host1
+         :user inits/user1
+         :password inits/pass1})
+
+
+
 
 
 (def datasource-options {:auto-commit        true
@@ -45,9 +49,11 @@
 (defn retryExecute [query n error]
   (loop [i 0]
     (if (> i n)
-      (println "failed retryExecute error code: " error)
       (do
-        (Thread/sleep 500)
+        (println "failed retryExecute error code: " error)
+        false)
+      (do
+        (Thread/sleep 5000)
         (println (str  (.getId(Thread/currentThread))))
         (try
           (jdbc/execute! db [query])
@@ -56,7 +62,8 @@
 
 
 (defn insertIgnoreGraph
-  "bulk insert of values [user follows] in vector xs into graph table, ignores duplicates"
+  "bulk insert of values [user follows] in vector xs into graph table, ignores duplicates
+  returns true if executed else false"
   [xs]
   (let [strings (map #(str "(" (get % 0) "," (get % 1) ")") xs)
         stringCall (reduce #(str %1 "," %2) strings)
@@ -66,6 +73,11 @@
       (catch java.sql.SQLException e
         (retryExecute query 5 (.getErrorCode e))))))
 
+
+(if (try
+      (jdbc/execute! db ["INSERT INTO `t` (`id`) VALUES (2);"])
+      (catch java.sql.SQLException e
+      )) true false)
 
 (defn insertIgnoreUsers
   "bulk insert of values
@@ -83,6 +95,7 @@
       (jdbc/execute! db [query])
       (catch java.sql.SQLException e
         (retryExecute query 5 (.getErrorCode e))))))
+
 
 
 (defn insertSavedFollower "insert user whose followers are already saved" [id]
@@ -134,5 +147,4 @@
 (defn followingsToDownload [xs]
   (let [ys (savedOrNoFollowings xs)]
   (filter #(not (contains? ys %)) xs)))
-
 

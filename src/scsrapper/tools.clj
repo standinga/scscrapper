@@ -1,4 +1,4 @@
-(ns scsrapper.downloaders
+(ns scsrapper.tools
   (:import [java.sql SQLException])
   (:require [clj-http.client :as client]
             [cheshire.core :refer :all]
@@ -74,13 +74,24 @@
         (println (str "user doesn't exist!!!" url))
         (loop [retry 1]
           (if (< retry 20)
-            (let [retry_call (do
-                               (Thread/sleep 500)
-                               (try (httpCall url)
-                                 (catch Exception e (println "e"))))]
+            (let [retry_call (do (Thread/sleep 500) (try (httpCall url) (catch Exception e (println "e"))))]
               (if (= (:status retry_call) 200)
                 retry_call
                 (recur (inc retry))))))))))
+
+(httpCallAndRetry "http://httpstat.us/500")
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 (defn idToUrl [id]
@@ -134,83 +145,42 @@
         (db/insert404 userId))))
 
 
-(defn dloadAndSave_Followings [userId]
-    (let [userInfo (httpCallAndRetry (str baseUrl userId userString))]
-      (if (not= userInfo nil) ;if nil it means error 404
-        (let [userURL (str baseUrl userId followingsString)]
-          (loop [url userURL i 0]
+(defn get_Hrefs [userId]
+        (let [userURL (str baseUrl userId followersString)]
+          (loop [url userURL i 0 acc []]
             (if (not= url nil)
-              (let [collection (get (parse-string (:body (httpCallAndRetry url)))"collection")
-                    newUrl (get (parse-string (:body (httpCallAndRetry url)))"next_href")]
-                (do
-                  (try (db/insertIgnoreUsers [(getUserInfo userInfo)]) (catch Exception e	(do (println e))))
-                  (if (not= collection [])
-                    (saveToDB collection userId "followings"))
-                  (recur newUrl (inc i))))
-              (do
-                (db/insertSavedFollowing userId)
-                (print (str userId "|"))))))
-        (db/insert404 userId))))
+              (let [newUrl (get (parse-string (:body (httpCallAndRetry url)))"next_href")]
+                  (recur newUrl (inc i) (if (not= newUrl nil) (conj acc (subs newUrl 112 119)) acc)))
+              acc))))
 
 
-(defn errorNotFound [xs]
-  (try
-    (db/insertIgnoreUsers (mapv #(get % :userData) (mapv userVector xs)))
-    (catch SQLException e#
-      nil)))
 
+(def get_Hrefs2 ["2338398" "8636496" "7635152" "6674788" "5707338" "4938371" "4247346" "3095290" "2008521" "1132042"
+                 "9282909" "8349869" "7505149" "6732450" "5739072" "4944106" "4187428" "3551644" "2905802" "2292585"
+                 "9960501" "9326684" "8691424" "8076363" "7449928" "6797208" "6175300" "5598142" "4956893" "4341010"
+                 "3764846" "3150236" "2648651" "2062568" "1705599" "1121166" "9883377" "9161406" "8501116" "7791778"
+                 "7076240" "6365651" "5707219" "5096094" "4462061" "3892841" "3267536" "2698320" "2041531" "1282545"
+                 "9490418" "8923019" "8392631" "7772114" "7107837" "6341025" "5651375" "5012440" "4336886" "3616914"
+                 "2999894" "2353911" "1818398" "1228830" "9510488" "9036595" "8467821" "7826855"
+                 "7180400" "6627908" "6009768" "5461260" "4850730" "4303554" "3781718" "3284058" "2829107" "2238845"
+                 "1764017" "1288852" "9738462" "9149683" "8626437" "8144618" "7672655" "7283435"
+                 "7012519" "6625117" "6233301" "5859087" "5487672" "5160986" "4845265" "4537967" "4208384" "3830442"
+                 "3418688" "2989394" "2616677" "2302560" "1927507" "1587384" "1265826"
+                 "9972714" "9688578" "9327826" "8911518" "8579000" "8232192" "7843866" "7509360" "7134553" "6840196"
+                 "6487510" "6065205" "5677501" "5311390" "5020579" "4676846" "4329952" "3978602" "3576723" "3225437"
+                 "2864868" "2541371" "2190112" "1839557" "1531784" "1203527" "9939715"
+                 "9684969" "9391947" "9073118" "8739377" "8437706" "8050931" "7747262" "7405644" "7081419" "6737868"
+                 "6411213" "6116766" "5769486" "5462034" "5122451" "4792145" "4429854" "4153663" "3768624" "3434058"
+                 "3106002" "2719512" "2363477" "1981088" "1590830" "1314272" "1046219" "9899244"
+                 "9479904" "8989539" "8666179" "8311449" "7964313" "7513553" "7054231" "6303968" "5651021" "4950762"
+                 "3251294" "9703898" "2990329" "7464589" "2179744" "7287548" "2780501" "9168554" "6834296" "4356219"
+                 "2841833" "1648311" "7619398" "4640251" "2054669" "1616607" "1197314"  "9443145"
+                 "8905659" "8317722" "7803972" "7392428" "6871274" "6334218" "5663344" "4921782" "4181057" "3051572"
+                 "1974266" "6998763" "7997367" "2527246"  "1461034"])
 
-(defn findBadQuerry
-  "this function perforns binary search through vector of queries
-  trying inserting then into db
-  if there is bad syntax querry it will be returned"
-  [xs]
-  (println "find bad")
-  (if (not= xs [])
-    (if (not (errorNotFound xs))
-      (let [length (count xs)]
-        (if (> length 2)
-          (let [half (/ length 2)
-                L (subvec xs 0 half)
-                R (subvec xs half)]
-            (findBadQuerry L)
-            (findBadQuerry R))
-          (println (get (userVector (get xs 0)) :userData)))))))
+(def s (sort (map read-string get_Hrefs2)))
 
-
-(defn testQuery [xs]
-  (doall (map findBadQuerry (map vec (partition-all 500 xs)))))
-
-
-(defn insertToDB [userId]
-  (let [userURL (str "http://api.soundcloud.com/users/" userId "/followers?client_id=af3e5e31e2e63ddad94791906ebddaec&page_size=200")
-        rawData (mapv userVector (urlCall userURL))
-        userData (mapv #(get % :userData) rawData)
-        userIDS (mapv (fn [x] [(get x :id) userId]) rawData)]
-    (db/insertIgnoreUsers userData)
-    (db/insertIgnoreGraph userIDS)))
-
-
-(defn get_user_id "returns user id from user name" [user_name]
-  "takes name of user and returns user id"
-  (let [call (httpCall (str "http://api.soundcloud.com/users/" user_name "?client_id=" soundcloud_client_id))
-        parsed_call (parse-string (:body call))]
-    (get parsed_call "id")))
-
-
-(defn -main []
-  (do
-    (println "enter ids range: ")
-    (let
-      [ids (map read-string (re-seq #"\w+" (read-line)))
-       a (first ids)
-       b (second ids)
-       followers (db/followersToDownload (range a b))
-       _ (println "followers " followers)
-       followings (db/followingsToDownload (range a b))
-       _ (println "followings " followings)]
-      (time (doall
-              (pmap (fn [x] (doall (pmap dloadAndSave_Followers x))) (partition-all 20 followers)))))))
-;;                    (pmap (fn [x] (doall (pmap dloadAndSave_Followings x))) (partition-all 20 (db/followingsToDownload (range a b)))))))))
-
-;; (-main)
+(loop [xs s acc[]]
+  (if (nil? (second xs))
+    acc
+    (recur (rest xs) (conj acc (- (second xs) (first xs))))))

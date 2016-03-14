@@ -10,3 +10,4 @@
 
 (defn writeHtml [text]
   (spit htmlFile text))
+
