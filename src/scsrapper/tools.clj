@@ -79,7 +79,7 @@
                 retry_call
                 (recur (inc retry))))))))))
 
-(httpCallAndRetry "http://httpstat.us/500")
+;; (httpCallAndRetry "http://httpstat.us/500")
 
 
 

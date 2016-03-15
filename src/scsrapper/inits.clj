@@ -11,3 +11,8 @@
 (defn writeHtml [text]
   (spit htmlFile text))
 
+(def pass1 "pass")
+
+(def user1 "root")
+
+(def host1 "//localhost:3306/soundcloud")

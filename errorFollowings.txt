@@ -1,0 +1,11 @@
+19,http://api.soundcloud.com/users/19/followings?client_id=af3e5e31e2e63ddad94791906ebddaec&page_size=200
+19,http://api.soundcloud.com/users/19/followings?client_id=af3e5e31e2e63ddad94791906ebddaec&page_size=200
+19,http://api.soundcloud.com/users/19/followings?client_id=af3e5e31e2e63ddad94791906ebddaec&page_size=200
+2,http://api.soundcloud.com/users/2/followings?client_id=af3e5e31e2e63ddad94791906ebddaec&page_size=200
+2,http://api.soundcloud.com/users/2/followings?client_id=af3e5e31e2e63ddad94791906ebddaec&page_size=200
+2,http://api.soundcloud.com/users/2/followings?client_id=af3e5e31e2e63ddad94791906ebddaec&page_size=200
+19,http://api.soundcloud.com/users/19/followings?client_id=af3e5e31e2e63ddad94791906ebddaec&page_size=200
+19,http://api.soundcloud.com/users/19/followings?client_id=af3e5e31e2e63ddad94791906ebddaec&page_size=200
+19,http://api.soundcloud.com/users/19/followings?client_id=af3e5e31e2e63ddad94791906ebddaec&page_size=200
+19,http://api.soundcloud.com/users/19/followings?client_id=af3e5e31e2e63ddad94791906ebddaec&page_size=200
+19,http://api.soundcloud.com/users/19/followings?client_id=af3e5e31e2e63ddad94791906ebddaec&page_size=200

@@ -4,6 +4,7 @@
             [cheshire.core :refer :all]
             [clojure.string]
             [clojure.edn :as edn]
+            [clojure.java.io :as io]
             [scsrapper.inits :refer :all]
             [clojure.java.jdbc :as jdbc]
             [scsrapper.emails :as emails]
@@ -14,6 +15,10 @@
 (def baseUrl "http://api.soundcloud.com/users/")
 
 (def followersString "/followers?client_id=af3e5e31e2e63ddad94791906ebddaec&page_size=200")
+
+(def errorFollowersFile "errorFollowers.txt")
+
+(def errorFollowingsFile "errorFollowings.txt")
 
 (def followingsString "/followings?client_id=af3e5e31e2e63ddad94791906ebddaec&page_size=200")
 
@@ -97,18 +102,31 @@
       acc)))
 
 
-(defn saveToDB [acc userId method]
+(defn saveFollowersToDB [acc userId]
   (let [rawData (mapv userVector acc)
         userData (mapv #(get % :userData) rawData)
-        userIDS (if (= method "followers")
-                  (mapv (fn [x] [(get x :id) userId]) rawData)
-                  (mapv (fn [x] [userId (get x :id)]) rawData))
-        _ (print "*")]
-    (try (db/insertIgnoreUsers userData) (catch Exception e (println e)))
-    (try (db/insertIgnoreGraph userIDS) (catch Exception e (println e)))))
+        userIDS (mapv (fn [x] [(get x :id) userId]) rawData)
+                  _ (print "*")]
+    (if (and
+        (db/insertIgnoreUsers userData)
+        (db/insertIgnoreGraph userIDS)) true)))
 
 
-(defn getUserInfo [userInfo]
+
+
+
+(defn saveFollowingsToDB [acc userId]
+  (let [rawData (mapv userVector acc)
+        userData (mapv #(get % :userData) rawData)
+        userIDS (mapv (fn [x] [userId (get x :id)]) rawData) ; changed order in graph comparing to followers
+                  _ (print "*")]
+    (if (and
+        (db/insertIgnoreUsers userData)
+        (db/insertIgnoreGraph userIDS)) true)))
+
+
+
+(defn parseUserInfo [userInfo]
   (-> (get userInfo :body)
       parse-string
       userVector
@@ -124,14 +142,88 @@
               (let [collection (get (parse-string (:body (httpCallAndRetry url)))"collection")
                     newUrl (get (parse-string (:body (httpCallAndRetry url)))"next_href")]
                 (do
-                  (try (db/insertIgnoreUsers [(getUserInfo userInfo)]) (catch Exception e	(do (println e))))
+                  (try (db/insertIgnoreUsers [(parseUserInfo userInfo)]) (catch Exception e	(do (println e))))
                   (if (not= collection [])
-                    (saveToDB collection userId "followers"))
+                    (saveFollowersToDB collection userId "followers"))
                   (recur newUrl (inc i))))
               (do
                 (db/insertSavedFollower userId)
                 (print (str userId "|"))))))
         (db/insert404 userId))))
+
+
+
+(defn saveUserInfo [userInfo]
+  (try (db/insertIgnoreUsers [(parseUserInfo userInfo)]) (catch Exception e	(do (println e) false))))
+
+
+(defn dloadUser [userId]
+  (let [userInfo (httpCallAndRetry (str baseUrl userId userString))]
+      (if (not= userInfo nil) ;if nil it means error 404
+        (if (saveUserInfo userInfo) true false)
+        (do (db/insert404 userId) (println "404")))))
+
+
+
+(defn saveErrorFollowers [userId url]
+  (if (.exists (clojure.java.io/as-file errorFollowersFile))
+    (spit errorFollowersFile (str userId "," url "\n") :append true)
+    (spit errorFollowersFile (str userId "," url "\n"))
+    ))
+
+
+(defn saveErrorFollowings [userId url]
+  (if (.exists (clojure.java.io/as-file errorFollowingsFile))
+    (spit errorFollowingsFile (str userId "," url "\n") :append true)
+    (spit errorFollowingsFile (str userId "," url "\n"))
+    ))
+
+
+
+(defn dlFollowers [userId]
+(let [userURL (str baseUrl userId followersString)]
+          (loop [url userURL]
+            (if (not= url nil)
+              (let [collection (get (parse-string (:body (httpCallAndRetry url)))"collection")
+                    newUrl (get (parse-string (:body (httpCallAndRetry url)))"next_href")]
+                  (if (not= collection [])
+                    (if (saveFollowersToDB collection userId)
+                      (recur newUrl)
+                      (do (println "error saving followers") (saveErrorFollowers userId url) false))))
+              (do
+                (db/insertSavedFollower userId)
+                (print (str userId "|"))
+                true)))))
+
+
+
+(defn dlFollowings [userId]
+(let [userURL (str baseUrl userId followingsString)]
+          (loop [url userURL]
+            (if (not= url nil)
+              (let [collection (get (parse-string (:body (httpCallAndRetry url)))"collection")
+                    newUrl (get (parse-string (:body (httpCallAndRetry url)))"next_href")]
+                  (if (not= collection [])
+                    (if (saveFollowingsToDB collection userId)
+                      (recur newUrl)
+                      (do (println "error saving followings") (saveErrorFollowings userId url) false))))
+              (do
+                (db/insertSavedFollowing userId)
+                (print (str userId "|"))
+                true)))))
+
+
+
+
+
+
+;; (dlFollowers 19)
+
+
+(dlFollowings 19)
+
+
+
 
 
 (defn dloadAndSave_Followings [userId]
@@ -143,9 +235,9 @@
               (let [collection (get (parse-string (:body (httpCallAndRetry url)))"collection")
                     newUrl (get (parse-string (:body (httpCallAndRetry url)))"next_href")]
                 (do
-                  (try (db/insertIgnoreUsers [(getUserInfo userInfo)]) (catch Exception e	(do (println e))))
+                  (try (db/insertIgnoreUsers [(parseUserInfo userInfo)]) (catch Exception e	(do (println e))))
                   (if (not= collection [])
-                    (saveToDB collection userId "followings"))
+                    (saveFollowersToDB collection userId))
                   (recur newUrl (inc i))))
               (do
                 (db/insertSavedFollowing userId)
@@ -213,4 +305,23 @@
               (pmap (fn [x] (doall (pmap dloadAndSave_Followers x))) (partition-all 20 followers)))))))
 ;;                    (pmap (fn [x] (doall (pmap dloadAndSave_Followings x))) (partition-all 20 (db/followingsToDownload (range a b)))))))))
 
-;; (-main)
+(defn downloadRange []
+  (do
+    (println "enter ids range: ")
+    (let
+      [ids (map read-string (re-seq #"\w+" (read-line)))
+       a (first ids)
+       b (second ids)
+       followers (db/followersToDownload (range a b))
+       _ (println "followers " followers)
+       followings (db/followingsToDownload (range a b))
+       _ (println "followings " followings)]
+      (time (doall
+              (pmap (fn [x] (doall (pmap dloadAndSave_Followers x))) (partition-all 20 followers)))))))
+
+;;;todo
+
+;; (defn downloadSelected []
+;;     (do (println "enter user id or ids: ")
+;;     (let [ids (map read-string (re-seq #"\w+" (read-line)))]
+;;       (time (doall (map id_sucker ids))))))

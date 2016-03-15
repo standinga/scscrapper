@@ -53,7 +53,7 @@
         (println "failed retryExecute error code: " error)
         false)
       (do
-        (Thread/sleep 5000)
+        (Thread/sleep 80)
         (println (str  (.getId(Thread/currentThread))))
         (try
           (jdbc/execute! db [query])

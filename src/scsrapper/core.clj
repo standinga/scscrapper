@@ -1,9 +1,21 @@
 (ns scsrapper.core
-  (:gen-class)
-    (:require [scsrapper.downloaders :as downloaders]))
+  (:require [clojure.java.io :as io]
+            [scsrapper.downloaders :as downloaders])
+  (:gen-class :main true))
+
 
 (defn -main
   [& args]
-  (downloaders/-main))
+  (if args
+    (cond
+      (or (= (first args) "-r") (= (first args) "-range")) (downloaders/downloadRange)
+
+  (println "RRRRR" (first args))
+  (println "i need flags...")))
+
+
+
+
+;;   (downloaders/-main))
 
 ;; (-main)
