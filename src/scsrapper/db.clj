@@ -97,6 +97,20 @@
         (retryExecute query 5 (.getErrorCode e))))))
 
 
+(defn insertComments
+  "bulk insert of comments"
+  [xs userId]
+    (let [strings (map #(str "(" userId "," (get % 0) ",'" (get % 1) "')") xs)
+        stringCall (reduce #(str %1 "," %2) strings)
+        query (str
+                "INSERT IGNORE INTO `comments` (`user_id`, `track_id`, `comment`) VALUES "
+                stringCall ";")]
+    (try
+      (jdbc/execute! db [query])
+      (catch java.sql.SQLException e
+        (retryExecute query 5 (.getErrorCode e))))))
+
+
 
 (defn insertSavedFollower "insert user whose followers are already saved" [id]
   (let [query (str "INSERT IGNORE INTO `savedfollowers` (`id`) VALUES (" id ");")]

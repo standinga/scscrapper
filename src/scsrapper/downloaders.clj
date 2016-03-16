@@ -18,6 +18,8 @@
 
 (def errorFollowersFile "errorFollowers.txt")
 
+(def commentsString "/comments?client_id=af3e5e31e2e63ddad94791906ebddaec&size=200")
+
 (def errorFollowingsFile "errorFollowings.txt")
 
 (def followingsString "/followings?client_id=af3e5e31e2e63ddad94791906ebddaec&page_size=200")
@@ -40,19 +42,31 @@
   {:id (user "id"), :username (user "username"),
    :followers_count (user "followers_count"), :country (user "country"), :full_name (user "full_name"),
    :track_count (user "track_count") :plan (user "plan"), :followings_count (user "followings_count"),
-   :description (user "description"), :reposts_count (user "reposts_count"),
-   :likes_count (user "likes_count"), :permalink (user "permalink")
+   :description (user "description"), :reposts_count (user "reposts_count"), :track_id (user "track_id")
+   :likes_count (user "likes_count"), :permalink (user "permalink"), :body (user "body")
    })
+
+
+(defn tructString
+  "truncates if longer than max length"
+  [string lebgth]
+  (if (<= (count string) lebgth)
+    string
+    (subs string 0 lebgth)))
 
 
 (defn escapeChars
   "characters for mysql syntax"
-  [string]
-  (if (> (count string) 40) "NULL"
+  [string maxLength]
     (if (= string nil) "NULL"
       (-> string
+          (tructString maxLength)
           (clojure.string/replace "\\" "")
-          (clojure.string/replace "'" "\\'")))))
+          (clojure.string/replace "'" "\\'"))))
+
+
+
+(escapeCharsComments "123'45678'/9" 16)
 
 
 (defn userVector
@@ -60,9 +74,9 @@
   [userData]
   (let [mappedUser (user_map userData)
         id (get mappedUser :id)
-        userName (escapeChars (get mappedUser :username))
+        userName (escapeChars (get mappedUser :username) 30)
         countryRuff (if (not= (get mappedUser :country) nil) (get mappedUser :country) "NULL")
-        country (escapeChars countryRuff)
+        country (escapeChars countryRuff 16)
         followers (get mappedUser :followers_count)
         followings (get mappedUser :followings_count)
         reposts (get mappedUser :reposts_count)
@@ -73,8 +87,17 @@
         fake 0
         plan (if (= (get mappedUser :plan) "Pro Unlimited") "U" (if  (= (get mappedUser :plan) "Pro") "P" "F"))
         emailRuff (emails/extractEmailFromDescription (get mappedUser :description))
-        email (escapeChars emailRuff)]
+        email (escapeChars emailRuff 40)]
     {:id id :userData [id url fake userName country email followers followings tracks 0 0 desl plan]}))
+
+
+(defn commentsVector
+  "returns vector of user info"
+  [userData]
+  (let [mappedUser (user_map userData)
+        track_id (get mappedUser :track_id)
+        body (escapeChars (get mappedUser :body) 600)]
+    [track_id body]))
 
 
 (defn httpCallAndRetry
@@ -93,12 +116,6 @@
               (if (= (:status retry_call) 200)
                 retry_call
                 (recur (inc retry))))))))))
-
-(get (client/get "http://api.soundcloud.com/users/297?client_id=af3e5e31e2e63ddad94791906ebddaec
-" {:throw-exceptions false}) :status)
-
-(httpCallAndRetry "http://api.soundcloud.com/users/297?client_id=af3e5e31e2e63ddad94791906ebddaec
-")
 
 
 (defn existUser? [userId]
@@ -124,6 +141,13 @@
     (if (and
           (db/insertIgnoreUsers userData)
           (db/insertIgnoreGraph userIDS)) true)))
+
+
+(defn saveCommentsToDB [acc userId]
+  (let [rawData (mapv commentsVector acc)
+;;          _ (print rawData)
+        ]
+    (if (db/insertComments rawData userId) true)))
 
 
 (defn parseUserInfo [userInfo]
@@ -180,7 +204,6 @@
            (db/insert404 userId)
            (print (str userId "e404"))))))
 
-;; (dlFollowers 6)
 
 
 (defn dlFollowings
@@ -192,7 +215,7 @@
        (if (not= url nil)
          (let [collection (get (parse-string (:body (httpCallAndRetry url)))"collection")
                newUrl (get (parse-string (:body (httpCallAndRetry url)))"next_href")
-;;                _ (println "dl followings" url)
+               _ (println "dl followings" url)
                ]
            (if (not= collection [])
              (if (saveFollowingsToDB collection userId)
@@ -210,7 +233,26 @@
      (do
            (db/insert404 userId)
            (print (str userId "e404"))))))
-;; (dlFollowings 3000000)
+
+
+
+(defn dlComments
+  "same as dlFollowers"
+  ([userId] (dlComments userId (str baseUrl userId commentsString)))
+  ([userId userURL]
+   (if (existUser? userId)
+       (if (not= userURL nil)
+         (let [collection  (parse-string (:body (httpCallAndRetry userURL)))]
+           (if (not= collection [])
+             (saveCommentsToDB collection userId))))
+     (do
+           (db/insert404 userId)
+           (print (str userId "e404"))))))
+
+
+;; (dlComments 65
+;;             )
+
 
 (defn readErrorFollowers
   "reads error followers, returns [[id1 url1] [id2 url2]...] or [] if file doesn't exist"
@@ -231,15 +273,15 @@
     []))
 
 
-
-
 (defn dloadUserInfo
   "dload and save user info if user doesn't exist update db 404 table "
   [userId]
   (let [userInfo (httpCallAndRetry (str baseUrl userId userString))]
     (if (not= userInfo nil) ;if nil it means error 404
       (if (saveUserInfo userInfo)
-        true)
+        (do
+          (dlComments userId) ;dloads user's comments
+          true))
       (do (db/insert404 userId) (println "404")))))
 
 
@@ -258,8 +300,7 @@
 (defn retryDloadErrors [x]
   (let [followers (readErrorFollowers)
         followings (readErrorFollowings)
-        _ (println "retry " followers followings)
-        ]
+        _ (println "retry " followers followings)]
     (do
       (try (io/delete-file errorFollowersFile) (catch Exception e))
       (try (io/delete-file errorFollowingsFile) (catch Exception e))
