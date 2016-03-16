@@ -53,8 +53,8 @@
         (println "failed retryExecute error code: " error)
         false)
       (do
-        (Thread/sleep 80)
-        (println (str  (.getId(Thread/currentThread))))
+        (Thread/sleep 800)
+        (println (str  "retry thread no. "(.getId(Thread/currentThread))))
         (try
           (jdbc/execute! db [query])
           (catch java.sql.SQLException e))
@@ -71,7 +71,7 @@
     (try
       (jdbc/execute! db [query])
       (catch java.sql.SQLException e
-        (retryExecute query 5 (.getErrorCode e))))))
+        (retryExecute query 6 (.getErrorCode e))))))
 
 
 (if (try
@@ -127,7 +127,7 @@
     (set (map #(get % :id) (jdbc/query db [query])))))
 
 
-(defn savedOrNoFolloers [xs]
+(defn savedOrNoFollowers [xs]
   (into (multIdsQuery "savedfollowers" xs) (multIdsQuery "e404" xs)))
 
 
@@ -135,16 +135,17 @@
   (into (multIdsQuery "savedfollowings" xs) (multIdsQuery "e404" xs)))
 
 (defn followersToDownload [xs]
-  (let [ys (savedOrNoFolloers xs)]
+  (let [ys (savedOrNoFollowers xs)]
   (filter #(not (contains? ys %)) xs)))
 
 
 (defn followersToDownload [xs]
-  (let [ys (savedOrNoFolloers xs)]
+  (let [ys (savedOrNoFollowers xs)]
   (filter #(not (contains? ys %)) xs)))
 
 
 (defn followingsToDownload [xs]
   (let [ys (savedOrNoFollowings xs)]
   (filter #(not (contains? ys %)) xs)))
+
 

@@ -7,15 +7,8 @@
 (defn -main
   [& args]
   (if args
-    (cond
+    (if
       (or (= (first args) "-r") (= (first args) "-range")) (downloaders/downloadRange)
+  (println "bad flag" (first args)))
+  (downloaders/downloadSelected)))
 
-  (println "RRRRR" (first args))
-  (println "i need flags...")))
-
-
-
-
-;;   (downloaders/-main))
-
-;; (-main)
