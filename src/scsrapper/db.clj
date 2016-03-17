@@ -1,7 +1,6 @@
 (ns scsrapper.db
   (:import [java.sql SQLException])
   (:require [clojure.java.jdbc :as jdbc]
-            [hikari-cp.core :refer :all]
             [scsrapper.inits :as inits]
             ))
 
@@ -13,39 +12,6 @@
 
 
 
-
-
-(def datasource-options {:auto-commit        true
-                         :read-only          false
-                         :connection-timeout 30000
-                         :validation-timeout 5000
-                         :idle-timeout       600000
-                         :max-lifetime       1800000
-                         :minimum-idle       10
-                         :maximum-pool-size  10
-;;                          :pool-name          "db-pool"
-                         :adapter            "mysql"
-                         :username           "rroot"
-                         :password           "pass"
-                         :database-name      "soundcloud"
-                         :server-name        "localhost"
-                         :port-number        3306
-                         :register-mbeans    false})
-
-;; (def datasource
-;;   (make-datasource datasource-options))
-
-
-
-;; (defn hikari [query]
-;;   (jdbc/with-db-connection [conn {:datasource datasource}]
-;;     (let [rows (jdbc/query conn query)]
-;;       (println rows)))
-;;   (close-datasource datasource))
-
-
-;; (hikari "SELECT * FROM e404 WHERE id=3")
-
 (defn retryExecute [query n error]
   (loop [i 0]
     (if (> i n)
@@ -53,7 +19,7 @@
         (println "failed retryExecute error code: " error)
         false)
       (do
-        (Thread/sleep 800)
+        (Thread/sleep 1500)
         (println (str  "retry thread no. "(.getId(Thread/currentThread))))
         (try
           (jdbc/execute! db [query])
@@ -73,11 +39,6 @@
       (catch java.sql.SQLException e
         (retryExecute query 6 (.getErrorCode e))))))
 
-
-(if (try
-      (jdbc/execute! db ["INSERT INTO `t` (`id`) VALUES (2);"])
-      (catch java.sql.SQLException e
-      )) true false)
 
 (defn insertIgnoreUsers
   "bulk insert of values

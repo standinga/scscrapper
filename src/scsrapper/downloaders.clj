@@ -11,16 +11,17 @@
             [scsrapper.db :as db]
             ))
 
+(def randn (int (rand 90000000))) ;random number to make error file name unique
 
 (def baseUrl "http://api.soundcloud.com/users/")
 
 (def followersString "/followers?client_id=af3e5e31e2e63ddad94791906ebddaec&page_size=200")
 
-(def errorFollowersFile "errorFollowers.txt")
+(def errorFollowersFile (str "/Volumes/ssd/db/errorFollowers" randn ".txt"))
+
+(def errorFollowingsFile (str "/Volumes/ssd/db/errorFollowings" randn ".txt"))
 
 (def commentsString "/comments?client_id=af3e5e31e2e63ddad94791906ebddaec&size=200")
-
-(def errorFollowingsFile "errorFollowings.txt")
 
 (def followingsString "/followings?client_id=af3e5e31e2e63ddad94791906ebddaec&page_size=200")
 
@@ -33,7 +34,7 @@
 (def boj 107508374)
 
 (defn httpCall [url]
-  (client/get url {:throw-exceptions false :socket-timeout 2000 :conn-timeout 2000}))
+  (client/get url {:throw-exceptions false :socket-timeout 5000 :conn-timeout 5000}))
 
 
 (defn user_map
@@ -63,10 +64,6 @@
           (tructString maxLength)
           (clojure.string/replace "\\" "")
           (clojure.string/replace "'" "\\'"))))
-
-
-
-(escapeCharsComments "123'45678'/9" 16)
 
 
 (defn userVector
@@ -110,12 +107,14 @@
         (println (str "e404"))
         (loop [retry 1]
           (if (< retry 5)
-            (let [retry_call (do (Thread/sleep 300)
+            (let [retry_call (do (Thread/sleep 1500)
                                (try (httpCall url)
-                                 (catch Exception e (println e url))))]
+                                 (catch Exception e (println "http error" url))))]
               (if (= (:status retry_call) 200)
                 retry_call
-                (recur (inc retry))))))))))
+                (recur (inc retry))))
+            nil
+            ))))))
 
 
 (defn existUser? [userId]
@@ -127,7 +126,7 @@
   (let [rawData (mapv userVector acc)
         userData (mapv #(get % :userData) rawData)
         userIDS (mapv (fn [x] [(get x :id) userId]) rawData)
-        _ (print "*")]
+        ]
     (if (and
           (db/insertIgnoreUsers userData)
           (db/insertIgnoreGraph userIDS)) true)))
@@ -137,7 +136,7 @@
   (let [rawData (mapv userVector acc)
         userData (mapv #(get % :userData) rawData)
         userIDS (mapv (fn [x] [userId (get x :id)]) rawData) ; changed order in graph comparing to followers
-        _ (print "*")]
+        ]
     (if (and
           (db/insertIgnoreUsers userData)
           (db/insertIgnoreGraph userIDS)) true)))
@@ -186,23 +185,28 @@
    (if (existUser? userId)
      (loop [url userURL]
        (if (not= url nil)
-         (let [collection (get (parse-string (:body (httpCallAndRetry url)))"collection")
-               newUrl (get (parse-string (:body (httpCallAndRetry url)))"next_href")]
+         (if-let [httpCall (httpCallAndRetry url)]
+           (let [
+               collection (get (parse-string (:body httpCall))"collection")
+               newUrl (get (parse-string (:body httpCall))"next_href")]
            (if (not= collection [])
              (if (saveFollowersToDB collection userId)
-               (recur newUrl)
+               (do (print ",") (recur newUrl))
                (do (println "error saving followers") (saveErrorFollowers userId url) false))
              (do
            (db/insertSavedFollower userId)
            (print (str userId "F"))
            true)))
+           (saveErrorFollowers userId url) ;httpcall returned nil resume didn't work
+           )
          (do
            (db/insertSavedFollower userId)
            (print (str userId "F"))
            true)))
      (do
            (db/insert404 userId)
-           (print (str userId "e404"))))))
+;;           (print (str userId "e404"))
+))))
 
 
 
@@ -213,26 +217,28 @@
    (if (existUser? userId)
      (loop [url userURL]
        (if (not= url nil)
-         (let [collection (get (parse-string (:body (httpCallAndRetry url)))"collection")
-               newUrl (get (parse-string (:body (httpCallAndRetry url)))"next_href")
-               _ (println "dl followings" url)
-               ]
+         (if-let [httpCall (httpCallAndRetry url)]
+           (let [
+               collection (get (parse-string (:body httpCall))"collection")
+               newUrl (get (parse-string (:body httpCall))"next_href")]
            (if (not= collection [])
              (if (saveFollowingsToDB collection userId)
-               (recur newUrl)
+               (do (print "." ) (recur newUrl))
                (do (println "error saving followings") (saveErrorFollowings userId url) false))
              (do
            (db/insertSavedFollowing userId)
            (print (str userId "f"))
            true)
              ))
+           (saveErrorFollowings userId url))
          (do
            (db/insertSavedFollowing userId)
            (print (str userId "f"))
            true)))
      (do
            (db/insert404 userId)
-           (print (str userId "e404"))))))
+;;           (print (str userId "e404"))
+))))
 
 
 
@@ -247,7 +253,8 @@
              (saveCommentsToDB collection userId))))
      (do
            (db/insert404 userId)
-           (print (str userId "e404"))))))
+;;           (print (str userId "e404"))
+))))
 
 
 ;; (dlComments 65
@@ -281,30 +288,32 @@
       (if (saveUserInfo userInfo)
         (do
           (dlComments userId) ;dloads user's comments
-          true))
-      (do (db/insert404 userId) (println "404")))))
+          (print "c" userId)))
+      (do (db/insert404 userId) 
+;;(println "404")
+))))
 
 
 (defn dlMultFollowers [ids]
-  (time (doall (pmap (fn [x] (doall (pmap dlFollowers x))) (partition-all (/ (count ids) 16) ids)))))
+   (doall (pmap (fn [x] (doall (pmap dlFollowers x))) (partition-all (/ (count ids) 8) ids))))
 
 
 (defn dlMultFollowings [ids]
-  (time (doall (pmap (fn [x] (doall (pmap dlFollowings x))) (partition-all (/ (count ids) 16) ids)))))
+   (doall (pmap (fn [x] (doall (pmap dlFollowings x))) (partition-all (/ (count ids) 8) ids))))
 
 
 (defn dlMultUsers [ids]
-  (time (doall (pmap (fn [x] (doall (pmap dloadUserInfo x))) (partition-all (/ (count ids) 16) ids)))))
+   (doall (pmap (fn [x] (doall (pmap dloadUserInfo x))) (partition-all (/ (count ids) 8) ids))))
 
 
-(defn retryDloadErrors [x]
+(defn retryDloadErrors []
   (let [followers (readErrorFollowers)
         followings (readErrorFollowings)
         _ (println "retry " followers followings)]
     (do
       (try (io/delete-file errorFollowersFile) (catch Exception e))
       (try (io/delete-file errorFollowingsFile) (catch Exception e))
-      (pvalues (doall (pmap (fn [x] (apply dlFollowers x)) followers))
+      (do (doall (pmap (fn [x] (apply dlFollowers x)) followers))
                (doall (pmap (fn [x] (apply dlFollowings x)) followings))))))
 
 
@@ -325,10 +334,13 @@
 
     (time
       (do
-         (pvalues (dlMultFollowers followersToDownload)
-                   (dlMultFollowings followingssToDownload))
+        (println "started dlMultFollowers")
+          (dlMultFollowers followersToDownload)
+        (println "started dlMultFollowings")
+                   (dlMultFollowings followingssToDownload)
+           (println "started dlMultUsers")
                    (dlMultUsers usersToDownload)
-        (retryDloadErrors 1)
+        (retryDloadErrors)
         )
 
 
