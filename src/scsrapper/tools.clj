@@ -8,6 +8,7 @@
             [clojure.java.jdbc :as jdbc]
             [scsrapper.emails :as emails]
             [scsrapper.db :as db]
+            [clojure.java.io :as io]
             ))
 
 
@@ -24,6 +25,20 @@
 (def bou 990322)
 
 (def boj 107508374)
+
+(def errorFollowersFileBase (str "/Volumes/ssd/db/errorFollowers"))
+
+
+(def baseDir "/Volumes/ssd/db/")
+
+(def errorFollowingsFileBase (str "/Volumes/ssd/db/errorFollowings"))
+
+(def f (clojure.java.io/file baseDir))
+
+(def fs (file-seq f))
+
+
+
 
 (defn httpCall [url]
   (client/get url {:socket-timeout 2000 :conn-timeout 2000}))
@@ -178,8 +193,61 @@
 (defn idToUrl [id]
   (str baseUrl id followersString))
 
+(defn names
+  "Return the .getName property of a sequence of files"
+  [file-s]
+  (map #(.getName %) file-s))
 
+(defn only-files
+  "Filter a sequence of files/directories by the .isFile property of
+  java.io.File"
+  [file-s]
+  (filter #(.isFile %) file-s))
 
 (defn testQuery [xs]
   (doall (map findBadQuerry (map vec (partition-all 500 xs)))))
 
+(defn followerNames [fnames]
+  (filter #(and (> (count %) 14) (= (subs % 0 14) "errorFollowers")) fnames))
+
+(defn followingNames [fnames]
+  (filter #(and (> (count %) 14) (= (subs % 0 14) "errorFollowing")) fnames))
+
+
+(defn readDeleteErrorFile [fname]
+  "reads error followers, returns [[id1 url1] [id2 url2]...] or [] if file doesn't exist"
+     (with-open [rdr (clojure.java.io/reader (str baseDir fname))]
+       (let [textVectors (doall (map #(clojure.string/split % #",") (line-seq rdr)))]
+         (do
+           (io/delete-file (str baseDir fname))
+           (set (map (fn [x] [(read-string (get x 0)) (get x 1)]) textVectors))))))
+
+
+(defn getErrorFilesNames [fnames]
+  (map #(readDeleteErrorFile %) fnames))
+
+(defn reduceEFiles [errorFiles]
+  (reduce #(into %1 %2) errorFiles))
+
+
+(defn getErrorFollowers [files]
+  (try (-> files
+      only-files
+      names
+      followerNames
+     getErrorFilesNames
+       reduceEFiles)
+    (catch Exception e)))
+
+
+(defn getErrorFollowings [files]
+  (try (-> files
+      only-files
+      names
+      followingNames
+      getErrorFilesNames
+      reduceEFiles)
+    (catch Exception e)))
+
+
+(getErrorFollowers fs)

@@ -9,6 +9,7 @@
             [clojure.java.jdbc :as jdbc]
             [scsrapper.emails :as emails]
             [scsrapper.db :as db]
+            [scsrapper.tools :as tools]
             ))
 
 (def randn (int (rand 90000000))) ;random number to make error file name unique
@@ -104,7 +105,7 @@
     (if (= (:status call100) 200)
       call100
       (if (= (:status call100) 404)
-        (println (str "e404"))
+        (print (str ""))
         (loop [retry 1]
           (if (< retry 5)
             (let [retry_call (do (Thread/sleep 1500)
@@ -113,8 +114,7 @@
               (if (= (:status retry_call) 200)
                 retry_call
                 (recur (inc retry))))
-            nil
-            ))))))
+            nil))))))
 
 
 (defn existUser? [userId]
@@ -143,9 +143,7 @@
 
 
 (defn saveCommentsToDB [acc userId]
-  (let [rawData (mapv commentsVector acc)
-;;          _ (print rawData)
-        ]
+  (let [rawData (mapv commentsVector acc)]
     (if (db/insertComments rawData userId) true)))
 
 
@@ -183,15 +181,15 @@
   ([userId] (dlFollowers userId (str baseUrl userId followersString)))
   ([userId userURL]
    (if (existUser? userId)
-     (loop [url userURL]
+     (loop [url userURL i 0]
        (if (not= url nil)
          (if-let [httpCall (httpCallAndRetry url)]
-           (let [
+           (let [_ (print (str "  _ " userId"["i"] _   "))
                collection (get (parse-string (:body httpCall))"collection")
                newUrl (get (parse-string (:body httpCall))"next_href")]
            (if (not= collection [])
              (if (saveFollowersToDB collection userId)
-               (do (print ",") (recur newUrl))
+               (do (print ",") (recur newUrl (inc i)))
                (do (println "error saving followers") (saveErrorFollowers userId url) false))
              (do
            (db/insertSavedFollower userId)
@@ -203,10 +201,7 @@
            (db/insertSavedFollower userId)
            (print (str userId "F"))
            true)))
-     (do
-           (db/insert404 userId)
-;;           (print (str userId "e404"))
-))))
+           (db/insert404 userId))))
 
 
 
@@ -218,7 +213,7 @@
      (loop [url userURL]
        (if (not= url nil)
          (if-let [httpCall (httpCallAndRetry url)]
-           (let [
+           (let [_ (print "+")
                collection (get (parse-string (:body httpCall))"collection")
                newUrl (get (parse-string (:body httpCall))"next_href")]
            (if (not= collection [])
@@ -228,18 +223,13 @@
              (do
            (db/insertSavedFollowing userId)
            (print (str userId "f"))
-           true)
-             ))
+           true)))
            (saveErrorFollowings userId url))
          (do
            (db/insertSavedFollowing userId)
            (print (str userId "f"))
            true)))
-     (do
-           (db/insert404 userId)
-;;           (print (str userId "e404"))
-))))
-
+     (db/insert404 userId))))
 
 
 (defn dlComments
@@ -251,14 +241,7 @@
          (let [collection  (parse-string (:body (httpCallAndRetry userURL)))]
            (if (not= collection [])
              (saveCommentsToDB collection userId))))
-     (do
-           (db/insert404 userId)
-;;           (print (str userId "e404"))
-))))
-
-
-;; (dlComments 65
-;;             )
+     (db/insert404 userId))))
 
 
 (defn readErrorFollowers
@@ -270,6 +253,7 @@
            (set (map (fn [x] [(read-string (get x 0)) (get x 1)]) textVectors))))
     []))
 
+
 (defn readErrorFollowings
   "same as readErrorFollowers"
   []
@@ -278,6 +262,7 @@
        (let [textVectors (doall (map #(clojure.string/split % #",") (line-seq rdr)))]
            (set (map (fn [x] [(read-string (get x 0)) (get x 1)]) textVectors))))
     []))
+
 
 
 (defn dloadUserInfo
@@ -289,13 +274,13 @@
         (do
           (dlComments userId) ;dloads user's comments
           (print "c" userId)))
-      (do (db/insert404 userId) 
-;;(println "404")
-))))
+      (do (db/insert404 userId)))))
+
 
 
 (defn dlMultFollowers [ids]
    (doall (pmap (fn [x] (doall (pmap dlFollowers x))) (partition-all (/ (count ids) 8) ids))))
+
 
 
 (defn dlMultFollowings [ids]
@@ -306,55 +291,55 @@
    (doall (pmap (fn [x] (doall (pmap dloadUserInfo x))) (partition-all (/ (count ids) 8) ids))))
 
 
-(defn retryDloadErrors []
-  (let [followers (readErrorFollowers)
-        followings (readErrorFollowings)
-        _ (println "retry " followers followings)]
-    (do
-      (try (io/delete-file errorFollowersFile) (catch Exception e))
-      (try (io/delete-file errorFollowingsFile) (catch Exception e))
+(defn retryDloadErrors1 []
+  (let [followers (tools/getErrorFollowers tools/fs)
+        followings (tools/getErrorFollowings tools/fs)
+        _ (println "retry " followers)]
       (do (doall (pmap (fn [x] (apply dlFollowers x)) followers))
-               (doall (pmap (fn [x] (apply dlFollowings x)) followings))))))
+               (doall (pmap (fn [x] (apply dlFollowings x)) followings)))))
+
+(defn retryFollowers []
+  (let [followers (tools/getErrorFollowers tools/fs)
+        _ (println "retry followers" followers)]
+      (doall (pmap (fn [x] (apply dlFollowers x)) followers))))
+
+
+(defn retryFollowings []
+  (let [followings (tools/getErrorFollowings tools/fs)
+        _ (println "retry " followings)]
+    (doall (pmap (fn [x] (apply dlFollowings x)) followings))))
 
 
 (defn when-done [future-to-watch function-to-call]
           (future (function-to-call @future-to-watch)))
 
-;; (dlMultUsers (range 8000000 8000300))
+
 (defn multDload
   "takes multiple ids, filters already downloaded or non existing users and
-  download them into db"
+  download them into db
+  first dl user infos and get non existin users (error 404)"
   [ids]
   (let [savedFollowers (db/savedOrNoFollowers ids)
         savedfollowings (db/savedOrNoFollowings ids)
         followersToDownload (filter #(not (contains? savedFollowers %)) ids)
         followingssToDownload (filter #(not (contains? savedfollowings %)) ids)
-        usersToDownload (set (into followersToDownload followingssToDownload))
-        _(println usersToDownload)]
-
-    (time
-      (do
+        _ (repeatedly 20 (newline))
+        _(println (count followingssToDownload))
+        _  (println "started dlMultFollowings")
+          _  (dlMultFollowings followingssToDownload)
+        ; again check if maybe new e404 added by dl user
+        savedFollowers (db/savedOrNoFollowers ids)
+        savedfollowings (db/savedOrNoFollowings ids)
+        followersToDownload (filter #(not (contains? savedFollowers %)) ids)
+        followingssToDownload (filter #(not (contains? savedfollowings %)) ids)
+        usersToDownload (set (into followersToDownload followingssToDownload))]
+    (time (do
         (println "started dlMultFollowers")
+        (println "download " (count followersToDownload) " followers")
           (dlMultFollowers followersToDownload)
         (println "started dlMultFollowings")
-                   (dlMultFollowings followingssToDownload)
            (println "started dlMultUsers")
-                   (dlMultUsers usersToDownload)
-        (retryDloadErrors)
-        )
-
-
-
-;;     (let [f (future (pvalues (dlMultFollowers followersToDownload)
-;;                    (dlMultFollowings followingssToDownload)
-;;                    (dlMultUsers usersToDownload)) 1)]
-;;             (when-done f #(retryDloadErrors %)))
-
-
-      )))
-
-
-
+                   (dlMultUsers usersToDownload)))))
 
 
 (defn downloadRange
@@ -368,6 +353,7 @@
        b (second values)
        ids (range a b)]
       (multDload ids))))
+
 
 
 (defn downloadSelected
