@@ -72,7 +72,6 @@
         (retryExecute query 5 (.getErrorCode e))))))
 
 
-
 (defn insertSavedFollower "insert user whose followers are already saved" [id]
   (let [query (str "INSERT IGNORE INTO `savedfollowers` (`id`) VALUES (" id ");")]
     (jdbc/execute! db [query])))
@@ -95,11 +94,21 @@
   (empty? (jdbc/query db [(str "SELECT * FROM `e404` JOIN `savedfollowers` where e404.id="
                                id " or savedfollowers.id=" id ";")])))
 
-(defn multIdsQuery [table xs]
+(defn multIdsQuery_AUX
+  "auxillary function used by multIdsQuery"
+  [table xs]
   (let [strings (map #(str %) xs)
         stringCall (reduce #(str %1 "," %2) strings)
           query (str "SELECT * FROM " table " where id in (" stringCall ");")]
     (set (map #(get % :id) (jdbc/query db [query])))))
+
+
+
+(defn multIdsQuery
+  "returns set of ids run on selected table splits into multiple bulk queries of max size 800"
+  [table xs]
+  (let [queries (map (fn [x] (multIdsQuery_AUX table x)) (partition-all 800 xs))]
+    (reduce #(into %1 %2) queries)))
 
 
 (defn savedOrNoFollowers [xs]
@@ -109,18 +118,21 @@
 (defn savedOrNoFollowings [xs]
   (into (multIdsQuery "savedfollowings" xs) (multIdsQuery "e404" xs)))
 
-(defn followersToDownload [xs]
-  (let [ys (savedOrNoFollowers xs)]
-  (filter #(not (contains? ys %)) xs)))
-
+(defn savedOrNoUsers [xs]
+  (into (multIdsQuery "users" xs) (multIdsQuery "e404" xs)))
 
 (defn followersToDownload [xs]
   (let [ys (savedOrNoFollowers xs)]
   (filter #(not (contains? ys %)) xs)))
 
+
+(defn followersToDownload [xs]
+  (let [ys (savedOrNoFollowers xs)]
+  (filter #(not (contains? ys %)) xs)))
 
 (defn followingsToDownload [xs]
   (let [ys (savedOrNoFollowings xs)]
   (filter #(not (contains? ys %)) xs)))
 
 
+;; (time (count (savedOrNoUsers (range 1 5000))))

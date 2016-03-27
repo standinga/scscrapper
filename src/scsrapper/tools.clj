@@ -131,22 +131,22 @@
 
 
 (defn dloadAndSave_Followers [userId]
-    (let [userInfo (httpCallAndRetry (str baseUrl userId userString))]
-      (if (not= userInfo nil) ;if nil it means error 404
-        (let [userURL (str baseUrl userId followersString)]
-          (loop [url userURL i 0]
-            (if (not= url nil)
-              (let [collection (get (parse-string (:body (httpCallAndRetry url)))"collection")
-                    newUrl (get (parse-string (:body (httpCallAndRetry url)))"next_href")]
-                (do
-                  (try (db/insertIgnoreUsers [(getUserInfo userInfo)]) (catch Exception e	(do (println e))))
-                  (if (not= collection [])
-                    (saveToDB collection userId "followers"))
-                  (recur newUrl (inc i))))
+  (let [userInfo (httpCallAndRetry (str baseUrl userId userString))]
+    (if (not= userInfo nil) ;if nil it means error 404
+      (let [userURL (str baseUrl userId followersString)]
+        (loop [url userURL i 0]
+          (if (not= url nil)
+            (let [collection (get (parse-string (:body (httpCallAndRetry url)))"collection")
+                  newUrl (get (parse-string (:body (httpCallAndRetry url)))"next_href")]
               (do
-                (db/insertSavedFollower userId)
-                (print (str userId "|"))))))
-        (db/insert404 userId))))
+                (try (db/insertIgnoreUsers [(getUserInfo userInfo)]) (catch Exception e	(do (println e))))
+                (if (not= collection [])
+                  (saveToDB collection userId "followers"))
+                (recur newUrl (inc i))))
+            (do
+              (db/insertSavedFollower userId)
+              (print (str userId "|"))))))
+      (db/insert404 userId))))
 
 
 (defn get_user_id "returns user id from user name" [user_name]
@@ -157,12 +157,12 @@
 
 
 (defn get_Hrefs [userId]
-        (let [userURL (str baseUrl userId followersString)]
-          (loop [url userURL i 0 acc []]
-            (if (not= url nil)
-              (let [newUrl (get (parse-string (:body (httpCallAndRetry url)))"next_href")]
-                  (recur newUrl (inc i) (if (not= newUrl nil) (conj acc (subs newUrl 112 119)) acc)))
-              acc))))
+  (let [userURL (str baseUrl userId followersString)]
+    (loop [url userURL i 0 acc []]
+      (if (not= url nil)
+        (let [newUrl (get (parse-string (:body (httpCallAndRetry url)))"next_href")]
+          (recur newUrl (inc i) (if (not= newUrl nil) (conj acc (subs newUrl 112 119)) acc)))
+        acc))))
 
 
 (defn errorNotFound [xs]
@@ -216,11 +216,11 @@
 
 (defn readDeleteErrorFile [fname]
   "reads error followers, returns [[id1 url1] [id2 url2]...] or [] if file doesn't exist"
-     (with-open [rdr (clojure.java.io/reader (str baseDir fname))]
-       (let [textVectors (doall (map #(clojure.string/split % #",") (line-seq rdr)))]
-         (do
-           (io/delete-file (str baseDir fname))
-           (set (map (fn [x] [(read-string (get x 0)) (get x 1)]) textVectors))))))
+  (with-open [rdr (clojure.java.io/reader (str baseDir fname))]
+    (let [textVectors (doall (map #(clojure.string/split % #",") (line-seq rdr)))]
+      (do
+        (io/delete-file (str baseDir fname))
+        (set (map (fn [x] [(read-string (get x 0)) (get x 1)]) textVectors))))))
 
 
 (defn getErrorFilesNames [fnames]
@@ -230,24 +230,33 @@
   (reduce #(into %1 %2) errorFiles))
 
 
-(defn getErrorFollowers [files]
-  (try (-> files
-      only-files
-      names
-      followerNames
-     getErrorFilesNames
-       reduceEFiles)
+(defn getErrorFollowers
+  "returns seq of [id, url] of followers that were saved in error files
+  removes followers that were already dloaded returns empty if there are no files with errors
+  also deletes those files"
+  [files]
+  (try
+    (let [idsUrls (try (-> files
+                           only-files
+                           names
+                           followerNames
+                           getErrorFilesNames
+                           reduceEFiles)
+                    (catch Exception e))
+          ids (map (fn [x] (get x 0)) idsUrls)
+          savedFollowers (db/savedOrNoFollowers ids)]
+      (filter (fn [x] (not (contains? savedFollowers (get x 0)))) idsUrls))
     (catch Exception e)))
 
 
 (defn getErrorFollowings [files]
   (try (-> files
-      only-files
-      names
-      followingNames
-      getErrorFilesNames
-      reduceEFiles)
+           only-files
+           names
+           followingNames
+           getErrorFilesNames
+           reduceEFiles)
     (catch Exception e)))
 
 
-(getErrorFollowers fs)
+;; (getErrorFollowers fs)

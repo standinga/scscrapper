@@ -278,17 +278,35 @@
 
 
 
-(defn dlMultFollowers [ids]
-   (doall (pmap (fn [x] (doall (pmap dlFollowers x))) (partition-all (/ (count ids) 8) ids))))
+(defn dlMultFollowers_Old [ids]
+   (time (do (println "started dlMultFollowers")
+        (println "download " (count ids) " followers")
+           (doall (pmap (fn [x] (doall (pmap dlFollowers x))) (partition-all (/ (count ids) 8) ids))))))
 
+
+(defn dlMultFollowers [ids]
+  (do (println "started dlMultFollowers")
+        (println "download " (count ids) " followers")
+           (doall
+            (map #(future (dlFollowers %)) ids))))
+
+
+(defn dlMultFollowings_Old [ids]
+  (do (println "started dlMultFollowings") (println (count ids))
+   (doall (pmap (fn [x] (doall (pmap dlFollowings x))) (partition-all (/ (count ids) 8) ids)))))
 
 
 (defn dlMultFollowings [ids]
-   (doall (pmap (fn [x] (doall (pmap dlFollowings x))) (partition-all (/ (count ids) 8) ids))))
+  (do (println "started dlMultFollowers")
+        (println "download " (count ids) " Followings")
+           (doall
+            (map #(future (dlFollowings %)) ids))))
+
 
 
 (defn dlMultUsers [ids]
-   (doall (pmap (fn [x] (doall (pmap dloadUserInfo x))) (partition-all (/ (count ids) 8) ids))))
+  (do (println "started dlMultUsers")
+   (doall (pmap (fn [x] (doall (pmap dloadUserInfo x))) (partition-all (/ (count ids) 8) ids)))))
 
 
 (defn retryDloadErrors1 []
@@ -300,7 +318,7 @@
 
 (defn retryFollowers []
   (let [followers (tools/getErrorFollowers tools/fs)
-        _ (println "retry followers" followers)]
+        _ (println "retry followers" (count followers))]
       (doall (pmap (fn [x] (apply dlFollowers x)) followers))))
 
 
@@ -319,27 +337,17 @@
   download them into db
   first dl user infos and get non existin users (error 404)"
   [ids]
-  (let [savedFollowers (db/savedOrNoFollowers ids)
-        savedfollowings (db/savedOrNoFollowings ids)
-        followersToDownload (filter #(not (contains? savedFollowers %)) ids)
+  (let [savedfollowings (db/savedOrNoFollowings ids)
         followingssToDownload (filter #(not (contains? savedfollowings %)) ids)
-        _ (repeatedly 20 (newline))
-        _(println (count followingssToDownload))
-        _  (println "started dlMultFollowings")
-          _  (dlMultFollowings followingssToDownload)
-        ; again check if maybe new e404 added by dl user
+        _ (dlMultFollowings followingssToDownload) ;dload followings
+        ; again check if maybe new e404 found and added by previous function
         savedFollowers (db/savedOrNoFollowers ids)
-        savedfollowings (db/savedOrNoFollowings ids)
         followersToDownload (filter #(not (contains? savedFollowers %)) ids)
-        followingssToDownload (filter #(not (contains? savedfollowings %)) ids)
-        usersToDownload (set (into followersToDownload followingssToDownload))]
-    (time (do
-        (println "started dlMultFollowers")
-        (println "download " (count followersToDownload) " followers")
-          (dlMultFollowers followersToDownload)
-        (println "started dlMultFollowings")
-           (println "started dlMultUsers")
-                   (dlMultUsers usersToDownload)))))
+        _ (dlMultFollowers followersToDownload)
+        usersToDownload (set (into followersToDownload followingssToDownload))
+        savedUsers (db/savedOrNoUsers ids)
+        updUsersToDload (filter #(not (contains? savedUsers %)) ids)]
+    (dlMultUsers updUsersToDload)))
 
 
 (defn downloadRange
@@ -350,9 +358,10 @@
     (let
       [values (map read-string (re-seq #"\w+" (read-line)))
        a (first values)
-       b (second values)
-       ids (range a b)]
-      (multDload ids))))
+       b (second values)]
+      (if (> a b)
+        (do (println "second id must be greater than first id") (downloadRange))
+          (multDload (range a b))))))
 
 
 
