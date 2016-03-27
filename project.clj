@@ -12,6 +12,7 @@
                  [org.clojure/java.jdbc "0.3.0"]
                  [java-jdbc/dsl "0.1.0"]
                  [mysql/mysql-connector-java "5.1.18"]
+                 [com.climate/claypoole "1.1.2"] ;lib for thread pool management
                   ]
   :main ^:skip-aot scsrapper.core
   :target-path "target/%s"

@@ -10,7 +10,13 @@
             [scsrapper.emails :as emails]
             [scsrapper.db :as db]
             [scsrapper.tools :as tools]
+            [com.climate.claypoole :as cp] ; thread pool management
             ))
+
+
+(def pool (cp/threadpool 25)) ;pool size 25 threads
+
+(def maxThreads 30)
 
 (def randn (int (rand 90000000))) ;random number to make error file name unique
 
@@ -278,17 +284,25 @@
 
 
 
-(defn dlMultFollowers_Old [ids]
+(defn dlMultFollowers_Oldest [ids]
    (time (do (println "started dlMultFollowers")
         (println "download " (count ids) " followers")
            (doall (pmap (fn [x] (doall (pmap dlFollowers x))) (partition-all (/ (count ids) 8) ids))))))
+
+
+(defn dlMultFollowers_Old [ids]
+  (do (println "started dlMultFollowers")
+        (println "download " (count ids) " followers")
+           (doall
+            (map #(future (dlFollowers %)) ids)))) ; instead of future cp/future
+
 
 
 (defn dlMultFollowers [ids]
   (do (println "started dlMultFollowers")
         (println "download " (count ids) " followers")
            (doall
-            (map #(future (dlFollowers %)) ids))))
+            (cp/pmap maxThreads dlFollowers ids)))) ; instead of future cp/pmap
 
 
 (defn dlMultFollowings_Old [ids]
@@ -300,13 +314,19 @@
   (do (println "started dlMultFollowers")
         (println "download " (count ids) " Followings")
            (doall
-            (map #(future (dlFollowings %)) ids))))
+            (cp/pmap maxThreads dlFollowings ids))))
 
+
+
+
+(defn dlMultUsers_old [ids]
+  (do (println "started dlMultUsers")
+   (doall (pmap (fn [x] (doall (pmap dloadUserInfo x))) (partition-all (/ (count ids) 8) ids)))))
 
 
 (defn dlMultUsers [ids]
   (do (println "started dlMultUsers")
-   (doall (pmap (fn [x] (doall (pmap dloadUserInfo x))) (partition-all (/ (count ids) 8) ids)))))
+    (doall (cp/pmap maxThreads dloadUserInfo ids))))
 
 
 (defn retryDloadErrors1 []
