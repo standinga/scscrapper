@@ -16,7 +16,7 @@
 
 (def pool (cp/threadpool 25)) ;pool size 25 threads
 
-(def maxThreads 30)
+(def maxThreads 20)
 
 (def randn (int (rand 90000000))) ;random number to make error file name unique
 
@@ -300,7 +300,7 @@
 
 (defn dlMultFollowers [ids]
   (do (println "started dlMultFollowers")
-        (println "download " (count ids) " followers")
+        (println "download " ids " followers")
            (doall
             (cp/pmap maxThreads dlFollowers ids)))) ; instead of future cp/pmap
 
