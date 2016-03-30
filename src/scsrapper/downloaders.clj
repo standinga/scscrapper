@@ -14,7 +14,7 @@
             ))
 
 
-(def pool (cp/threadpool 25)) ;pool size 25 threads
+(def pool (cp/threadpool 20)) ;pool size threads
 
 (def maxThreads 20)
 
@@ -111,10 +111,10 @@
     (if (= (:status call100) 200)
       call100
       (if (= (:status call100) 404)
-        (print (str ""))
+        "e404"
         (loop [retry 1]
-          (if (< retry 5)
-            (let [retry_call (do (Thread/sleep 1500)
+          (if (< retry 10)
+            (let [retry_call (do (Thread/sleep 5000)
                                (try (httpCall url)
                                  (catch Exception e (println "http error" url))))]
               (if (= (:status retry_call) 200)
@@ -125,7 +125,7 @@
 
 (defn existUser? [userId]
   (let [userInfo (httpCallAndRetry (str baseUrl userId userString))]
-    (not= userInfo nil)))
+    (not= userInfo "e404")))
 
 
 (defn saveFollowersToDB [acc userId]
@@ -190,7 +190,7 @@
      (loop [url userURL i 0]
        (if (not= url nil)
          (if-let [httpCall (httpCallAndRetry url)]
-           (let [_ (print (str "  _ " userId"["i"] _   "))
+           (let [_ (print (str " " userId"["i"] "))
                collection (get (parse-string (:body httpCall))"collection")
                newUrl (get (parse-string (:body httpCall))"next_href")]
            (if (not= collection [])
@@ -202,7 +202,7 @@
            (print (str userId "F"))
            true)))
            (saveErrorFollowers userId url) ;httpcall returned nil resume didn't work
-           )
+  )
          (do
            (db/insertSavedFollower userId)
            (print (str userId "F"))
@@ -290,15 +290,15 @@
            (doall (pmap (fn [x] (doall (pmap dlFollowers x))) (partition-all (/ (count ids) 8) ids))))))
 
 
-(defn dlMultFollowers_Old [ids]
+(defn dlMultFollowers [ids]
   (do (println "started dlMultFollowers")
         (println "download " (count ids) " followers")
-           (doall
-            (map #(future (dlFollowers %)) ids)))) ; instead of future cp/future
+          (let [futures (doall (map #(cp/future pool (dlFollowers %)) ids))
+                contents (map deref futures)]
+            (println (count contents))))) ; instead of future cp/future
 
 
-
-(defn dlMultFollowers [ids]
+(defn dlMultFollowers_new [ids]
   (do (println "started dlMultFollowers")
         (println "download " ids " followers")
            (doall
@@ -382,6 +382,11 @@
       (if (> a b)
         (do (println "second id must be greater than first id") (downloadRange))
           (multDload (range a b))))))
+
+(defn downloadBigs
+  "download not downloaded users from table bigs"
+  []
+  (multDload (db/getbigs)))
 
 
 

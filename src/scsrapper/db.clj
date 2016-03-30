@@ -15,16 +15,12 @@
 (defn retryExecute [query n error]
   (loop [i 0]
     (if (> i n)
-      (do
-        (println "failed retryExecute error code: " error)
-        false)
-      (do
-        (Thread/sleep 1500)
+      (do (println "failed retryExecute error code: " error) false) ;return false could not retry
+      (do (Thread/sleep 1500)
         (println (str  "retry thread no. "(.getId(Thread/currentThread))))
-        (try
-          (jdbc/execute! db [query])
-          (catch java.sql.SQLException e))
-        (recur (inc i))))))
+        (let [retry (try (jdbc/execute! db [query]) (catch java.sql.SQLException e))]
+          (if (vector? retry) (do (println "retry ok ") true)
+              (recur (inc i))))))))
 
 
 (defn insertIgnoreGraph
@@ -39,6 +35,8 @@
       (catch java.sql.SQLException e
         (retryExecute query 6 (.getErrorCode e))))))
 
+
+;; (vector? (jdbc/execute! db ["INSERT IGNORE INTO `graph` (`user`, `follows`) VALUES(1, 2),(1, 6),(1, 8),(1, 12);"]))
 
 (defn insertIgnoreUsers
   "bulk insert of values
@@ -134,5 +132,14 @@
   (let [ys (savedOrNoFollowings xs)]
   (filter #(not (contains? ys %)) xs)))
 
+(defn getbigs []
+  (->>
+   (jdbc/query db ["SELECT id FROM bigs WHERE id NOT IN (SELECT * FROM savedfollowers)"])
+   (map :id)
+   ))
+
+;; (getbigs)
+
+;; ({:id 675480} :id)
 
 ;; (time (count (savedOrNoUsers (range 1 5000))))

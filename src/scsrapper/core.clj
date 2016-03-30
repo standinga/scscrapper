@@ -22,6 +22,7 @@
        (or (= (first args) "-r") (= (first args) "-range")) (downloaders/downloadRange)
        (or (= (first args) "-e") (= (first args) "-followers")) (downloaders/retryFollowers)
         (or (= (first args) "-f") (= (first args) "-followings")) (downloaders/retryFollowings)
+     (or (= (first args) "-b") (= (first args) "-bigs")) (downloaders/downloadBigs)
       (or (= (first args) "-h") (= (first args) "-help")) (help)
      )
   (downloaders/downloadSelected)))
