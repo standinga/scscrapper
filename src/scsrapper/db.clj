@@ -135,8 +135,15 @@
 (defn getbigs []
   (->>
    (jdbc/query db ["SELECT id FROM bigs WHERE id NOT IN (SELECT * FROM savedfollowers)"])
-   (map :id)
-   ))
+   (map :id)))
+
+
+(defn getQuery [query]
+    (->>
+   (jdbc/query db [query])
+   (map :id)))
+
+
 
 ;; (getbigs)
 

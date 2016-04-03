@@ -28,6 +28,8 @@
 
 (def errorFollowingsFile (str "/Volumes/ssd/db/errorFollowings" randn ".txt"))
 
+(def progressFile (str "/Volumes/ssd/db/progress/p"))
+
 (def commentsString "/comments?client_id=af3e5e31e2e63ddad94791906ebddaec&size=200")
 
 (def followingsString "/followings?client_id=af3e5e31e2e63ddad94791906ebddaec&page_size=200")
@@ -190,7 +192,8 @@
      (loop [url userURL i 0]
        (if (not= url nil)
          (if-let [httpCall (httpCallAndRetry url)]
-           (let [_ (print (str " " userId"["i"] "))
+           (let [_ (if (and (> i 1) (= (mod i 50) 0)) (spit (str progressFile userId "_" i ".txt") url)) ; saves url every 50 downloads in case fatal error
+                 _ (print (str " " userId"["i"] "))
                collection (get (parse-string (:body httpCall))"collection")
                newUrl (get (parse-string (:body httpCall))"next_href")]
            (if (not= collection [])
@@ -387,6 +390,14 @@
   "download not downloaded users from table bigs"
   []
   (multDload (db/getbigs)))
+
+
+(defn queryDownload
+  "input sql query and download users selected by that query"
+  []
+  (do (println "type sql select query")
+  (multDload (db/getQuery (read-line)))))
+
 
 
 
