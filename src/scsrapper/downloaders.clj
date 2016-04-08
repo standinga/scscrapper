@@ -13,10 +13,11 @@
             [com.climate.claypoole :as cp] ; thread pool management
             ))
 
+(def remaining (atom 0))
 
-(def pool (cp/threadpool 20)) ;pool size threads
+(def pool (cp/threadpool 30)) ;pool size threads
 
-(def maxThreads 20)
+(def maxThreads 30)
 
 (def randn (int (rand 90000000))) ;random number to make error file name unique
 
@@ -193,22 +194,23 @@
        (if (not= url nil)
          (if-let [httpCall (httpCallAndRetry url)]
            (let [_ (if (and (> i 1) (= (mod i 50) 0)) (spit (str progressFile userId "_" i ".txt") url)) ; saves url every 50 downloads in case fatal error
-                 _ (print (str " " userId"["i"] "))
+;;                  _ (print (str " " userId"["i"] "))
                collection (get (parse-string (:body httpCall))"collection")
                newUrl (get (parse-string (:body httpCall))"next_href")]
            (if (not= collection [])
              (if (saveFollowersToDB collection userId)
-               (do (print ",") (recur newUrl (inc i)))
+               (do (if (= (mod i 50) 0) (print ",")) (recur newUrl (inc i)))
                (do (println "error saving followers") (saveErrorFollowers userId url) false))
              (do
            (db/insertSavedFollower userId)
-           (print (str userId "F"))
-           true)))
+                   true)))
            (saveErrorFollowers userId url) ;httpcall returned nil resume didn't work
   )
          (do
            (db/insertSavedFollower userId)
-           (print (str userId "F"))
+;;            (print (str userId "F"))
+           (swap! remaining dec)
+           (if (= (mod @remaining 100) 0) (println (str "done " userId " remaining followers: " @remaining "   active dloads " (dec (Thread/activeCount)))))
            true)))
            (db/insert404 userId))))
 
@@ -294,8 +296,8 @@
 
 
 (defn dlMultFollowers [ids]
-  (do (println "started dlMultFollowers")
-        (println "download " (count ids) " followers")
+  (do (println "started dlMultFollowers") (reset! remaining (count ids))
+        (println "download " @remaining " followers")
           (let [futures (doall (map #(cp/future pool (dlFollowers %)) ids))
                 contents (map deref futures)]
             (println (count contents))))) ; instead of future cp/future
@@ -314,7 +316,7 @@
 
 
 (defn dlMultFollowings [ids]
-  (do (println "started dlMultFollowers")
+  (do (println "started dlMultFollowings")
         (println "download " (count ids) " Followings")
            (doall
             (cp/pmap maxThreads dlFollowings ids))))

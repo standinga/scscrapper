@@ -259,4 +259,39 @@
     (catch Exception e)))
 
 
+(defn getProgressFiles []
+  (->> "/Volumes/ssd/db/progress/"
+      clojure.java.io/file
+      file-seq
+      only-files
+      names
+      (filter #(= (first %) \p))
+       (map #(clojure.string/split % #"[_.p]"))
+       (map (fn [x] [(read-string (x 1)) (read-string (x 2))]))))
+
+(getProgressFiles)
+
+
+
 ;; (getErrorFollowers fs)
+(defn larger [[user1 offset1] [user2 offset2]]
+  (if (= user1 user2)
+    (if (> offset1 offset2) [user1 offset1] [user1 offset2])
+    [user1 offset1]))
+
+
+(defn t [[_ x y ] [_ a b ]]
+  (+ x y a b))
+
+
+
+(t [12 1 2] [13 3 4])
+
+
+
+
+;; (larger [1 4] [1 3])
+
+
+
+  (reduce  #(into (larger %1 %2) {}) (getProgressFiles))
